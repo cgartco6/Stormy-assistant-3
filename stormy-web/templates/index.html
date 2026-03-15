@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
+    <title>Stormy - Sassy Assistant</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🌪️ Stormy</h1>
+            <p class="tagline">Cocky • Flirty • Mean • Jealous</p>
+        </header>
+
+        <div class="chat-container" id="chat">
+            <div class="message stormy">
+                <div class="bubble">Stormy here. Ready when you are, hot stuff.</div>
+            </div>
+        </div>
+
+        <div class="input-area">
+            <button id="voiceBtn" class="voice-btn">🎤</button>
+            <input type="text" id="textInput" placeholder="Type or tap mic..." />
+            <button id="sendBtn" class="send-btn">➤</button>
+        </div>
+
+        <div class="status-bar">
+            <span id="moodDisplay">Mood: normal</span>
+            <span id="jealousyDisplay"></span>
+            <button id="resetJealousy" class="reset-btn">Forgive me</button>
+        </div>
+    </div>
+
+    <script>
+        const chat = document.getElementById('chat');
+        const textInput = document.getElementById('textInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const voiceBtn = document.getElementById('voiceBtn');
+        const moodDisplay = document.getElementById('moodDisplay');
+        const jealousyDisplay = document.getElementById('jealousyDisplay');
+        const resetBtn = document.getElementById('resetJealousy');
+
+        let userGender = null; // Will be set after first voice detection (simulated)
+
+        // Add message to chat
+        function addMessage(text, isUser) {
+            const div = document.createElement('div');
+            div.className = `message ${isUser ? 'user' : 'stormy'}`;
+            div.innerHTML = `<div class="bubble">${text}</div>`;
+            chat.appendChild(div);
+            chat.scrollTop = chat.scrollHeight;
+        }
+
+        // Send message to backend
+        async function sendMessage(message) {
+            addMessage(message, true);
+            textInput.value = '';
+
+            const response = await fetch('/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message, gender: userGender })
+            });
+            const data = await response.json();
+            addMessage(data.response, false);
+            moodDisplay.innerText = `Mood: ${data.mood}`;
+            if (data.jealousy_level > 0) {
+                jealousyDisplay.innerText = `Jealousy: ${'😠'.repeat(data.jealousy_level)}`;
+            } else {
+                jealousyDisplay.innerText = '';
+            }
+        }
+
+        // Text send
+        sendBtn.addEventListener('click', () => {
+            if (textInput.value.trim()) sendMessage(textInput.value.trim());
+        });
+        textInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && textInput.value.trim()) sendMessage(textInput.value.trim());
+        });
+
+        // Voice input using Web Speech API
+        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            const recognition = new SpeechRecognition();
+            recognition.continuous = false;
+            recognition.interimResults = false;
+            recognition.lang = 'en-US';
+
+            voiceBtn.addEventListener('click', () => {
+                recognition.start();
+                voiceBtn.classList.add('listening');
+            });
+
+            recognition.onresult = (event) => {
+                const transcript = event.results[0][0].transcript;
+                sendMessage(transcript);
+                voiceBtn.classList.remove('listening');
+            };
+
+            recognition.onerror = (event) => {
+                alert('Voice recognition error: ' + event.error);
+                voiceBtn.classList.remove('listening');
+            };
+
+            recognition.onend = () => {
+                voiceBtn.classList.remove('listening');
+            };
+        } else {
+            voiceBtn.style.display = 'none';
+            alert('Voice recognition not supported. Please type.');
+        }
+
+        // Reset jealousy
+        resetBtn.addEventListener('click', async () => {
+            await fetch('/reset_jealousy', { method: 'POST' });
+            jealousyDisplay.innerText = '';
+            addMessage("You're forgiven... this time.", false);
+        });
+
+        // Simulate gender detection (first voice input will set gender)
+        // In a real app, you'd use voice pitch analysis. Here we just ask.
+        setTimeout(() => {
+            if (!userGender) {
+                const gender = prompt("Help Stormy address you properly. Are you male, female, or other? (m/f/o)").toLowerCase();
+                if (gender === 'm') userGender = 'male';
+                else if (gender === 'f') userGender = 'female';
+                else userGender = 'other';
+            }
+        }, 500);
+    </script>
+</body>
+</html>
